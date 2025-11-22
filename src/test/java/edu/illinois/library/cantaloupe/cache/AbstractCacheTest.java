@@ -281,8 +281,53 @@ abstract class AbstractCacheTest extends BaseTest {
     }
 
     @Test
-    void testNewDerivativeImageOutputStreamOverwritesExistingImage() {
-        // TODO: write this
+    void testNewDerivativeImageOutputStreamOverwritesExistingImage() throws Exception {
+        final DerivativeCache instance = newInstance();
+        final OperationList ops = OperationList.builder()
+                .withIdentifier(new Identifier("cats"))
+                .withOperations(new Encode(Format.get("jpg")))
+                .build();
+        final Path smallFixture = TestUtil.getImage("jpg");
+        final Path largeFixture = TestUtil.getImage("gif");
+
+        // Assert that it's not already cached
+        assertNull(instance.newDerivativeImageInputStream(ops));
+
+        // Add the small image to the cache
+        try (CompletableOutputStream outputStream =
+                     instance.newDerivativeImageOutputStream(ops)) {
+            Files.copy(smallFixture, outputStream);
+            outputStream.setComplete(true);
+        }
+
+        // Wait for it to upload
+        Thread.sleep(ASYNC_WAIT);
+
+        // Verify the small image is cached
+        try (InputStream is = instance.newDerivativeImageInputStream(ops)) {
+            ByteArrayOutputStream os = new ByteArrayOutputStream();
+            is.transferTo(os);
+            os.close();
+            assertEquals(Files.size(smallFixture), os.toByteArray().length);
+        }
+
+        // Overwrite with the large image
+        try (CompletableOutputStream outputStream =
+                     instance.newDerivativeImageOutputStream(ops)) {
+            Files.copy(largeFixture, outputStream);
+            outputStream.setComplete(true);
+        }
+
+        // Wait for it to upload
+        Thread.sleep(ASYNC_WAIT);
+
+        // Verify the large image has replaced the small one
+        try (InputStream is = instance.newDerivativeImageInputStream(ops)) {
+            ByteArrayOutputStream os = new ByteArrayOutputStream();
+            is.transferTo(os);
+            os.close();
+            assertEquals(Files.size(largeFixture), os.toByteArray().length);
+        }
     }
 
     /* purge() */
